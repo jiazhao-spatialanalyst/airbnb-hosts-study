@@ -1,14 +1,21 @@
 <template>
   <router-view />
 </template>
-body {
-  overflow: hidden;
+
+<script>
+// your script content
+</script>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
 }
+
 #app {
-  font-family: Roboto, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  color: var(--color-theme-black);
-  text-align: center;
+  height: 100vh;
+  width: 100vw;
 }
 </style>

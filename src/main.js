@@ -1,10 +1,10 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router/router'
-import { store } from './store'
+import store from './store/index.js'
+import router from './router/index.js'
+import './index.css'
 
-import './style/tailwind.css'
-
-import VueApexCharts from 'vue3-apexcharts'
-
-createApp(App).use(router).use(store).use(VueApexCharts).mount('#app')
+const app = createApp(App)
+app.use(store)
+app.use(router)
+app.mount('#app')
