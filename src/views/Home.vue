@@ -1,9 +1,14 @@
 <template>
   <div class="home-container">
-    <MapView :isSidebarCollapsed="isSidebarCollapsed" />
+    <MapView 
+      :isSidebarCollapsed="isSidebarCollapsed"
+      :selectedLocation="selectedLocation"
+    />
     <Sidebar 
       :aboutToggle="aboutToggle" 
       @collapse-change="handleSidebarCollapse" 
+      @city-selected="handleCitySelect"
+      @time-changed="handleTimeChange"
     />
     <AboutButton 
       :aboutToggle="aboutToggle" 
@@ -33,16 +38,29 @@ export default {
     const aboutToggle = ref(false)
     const loading = ref(false)
     const isSidebarCollapsed = ref(false)
+    const selectedLocation = ref(null)
 
     const handleSidebarCollapse = (collapsed) => {
       isSidebarCollapsed.value = collapsed
+    }
+
+    const handleCitySelect = (location) => {
+      selectedLocation.value = location
+    }
+
+    const handleTimeChange = (timestamp) => {
+      console.log('Time changed:', new Date(timestamp))
+      // 处理时间变化
     }
 
     return {
       aboutToggle,
       loading,
       isSidebarCollapsed,
-      handleSidebarCollapse
+      handleSidebarCollapse,
+      selectedLocation,
+      handleCitySelect,
+      handleTimeChange
     }
   }
 }
