@@ -3,17 +3,21 @@
     <MapView 
       :isSidebarCollapsed="isSidebarCollapsed"
       :selectedLocation="selectedLocation"
+      :selectedHostTypes="selectedHostTypes"
+      :currentTime="currentTime"
     />
     <Sidebar 
       :aboutToggle="aboutToggle" 
       @collapse-change="handleSidebarCollapse" 
       @city-selected="handleCitySelect"
       @time-changed="handleTimeChange"
+      @host-types-changed="handleHostTypesChange"
+      :class="{ 'collapsed': isSidebarCollapsed }"
     />
     <AboutButton 
       :aboutToggle="aboutToggle" 
       @toggle="aboutToggle = !aboutToggle" 
-      class="z-20"
+      :class="{ 'z-20': true }"
     />
     <LoadingSpinner v-if="loading" />
   </div>
@@ -39,6 +43,8 @@ export default {
     const loading = ref(false)
     const isSidebarCollapsed = ref(false)
     const selectedLocation = ref(null)
+    const selectedHostTypes = ref([])
+    const currentTime = ref(null)
 
     const handleSidebarCollapse = (collapsed) => {
       isSidebarCollapsed.value = collapsed
@@ -49,8 +55,13 @@ export default {
     }
 
     const handleTimeChange = (timestamp) => {
-      console.log('Time changed:', new Date(timestamp))
-      // 处理时间变化
+      const timeValue = Number(timestamp)
+      currentTime.value = timeValue
+      console.log('Time changed:', new Date(timeValue))
+    }
+
+    const handleHostTypesChange = (types) => {
+      selectedHostTypes.value = types
     }
 
     return {
@@ -60,7 +71,10 @@ export default {
       handleSidebarCollapse,
       selectedLocation,
       handleCitySelect,
-      handleTimeChange
+      handleTimeChange,
+      selectedHostTypes,
+      currentTime,
+      handleHostTypesChange
     }
   }
 }

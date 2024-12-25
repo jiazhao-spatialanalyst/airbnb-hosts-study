@@ -9,6 +9,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { mapOptions } from '../assets/data'
 import { onMounted, onUnmounted, watch } from 'vue'
+import axios from 'axios'
 
 export default {
   name: 'MapView',
@@ -20,12 +21,27 @@ export default {
     selectedLocation: {
       type: Object,
       default: () => null
+    },
+    selectedHostTypes: {
+      type: Array,
+      default: () => []
+    },
+    currentTime: {
+      type: Number,
+      default: null
     }
   },
   setup(props) {
     let map = null
     let currentCenter = null
     let mousePosition = null
+    const layerColors = {
+      highly_commercial: '#FF0000',  // 红色
+      commercial: '#FFA500',         // 橙色
+      semi_commercial: '#FFFF00',    // 黄色
+      dual_host: '#00FF00',         // 绿色
+      single_host: '#0000FF'        // 蓝色
+    }
 
     onMounted(() => {
       mapboxgl.accessToken = 'pk.eyJ1Ijoia3BmdWkiLCJhIjoiY2p6MWcxMXl4MDFlbTNsbDc1bnp6N3FjYSJ9.66qFOXwI661MOPOf7x96yA'
@@ -36,12 +52,103 @@ export default {
 
       map.on('load', () => {
         console.debug('map loaded')
+        // 为每种类型创建图层
+        Object.entries(layerColors).forEach(([type, color]) => {
+          map.addSource(`listings-${type}`, {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: []
+            }
+          })
+          
+          map.addLayer({
+            id: `listings-layer-${type}`,
+            type: 'circle',
+            source: `listings-${type}`,
+            paint: {
+              'circle-radius': 6,
+              'circle-color': color,
+              'circle-opacity': 0.6
+            }
+          })
+        })
       })
 
       map.on('mousemove', (e) => {
         mousePosition = e.lngLat
       })
     })
+
+    const updateListings = async (hostType) => {
+      console.log('Checking conditions:', {
+        city: props.selectedLocation?.city,
+        time: props.currentTime,
+        type: hostType
+      })
+
+      if (!props.selectedLocation?.city || !props.currentTime) {
+        console.log('Some conditions not met, skipping update')
+        return
+      }
+      
+      const date = new Date(Number(props.currentTime))
+      const timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      
+      try {
+        const response = await axios.get(
+          `http://localhost:8000/city/${props.selectedLocation.city}/listings_by_categories`,
+          {
+            params: {
+              time_point: timeStr,
+              categories: hostType
+            },
+            withCredentials: true,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+        
+        if (!response.data || !response.data.listings) {
+          console.error('Invalid response format:', response.data)
+          return
+        }
+        
+        const features = response.data.listings.map(listing => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [listing.longitude, listing.latitude]
+          },
+          properties: {
+            host_id: listing.host_id,
+            name: listing.name,
+            price: listing.price
+          }
+        }))
+        
+        if (map.getSource(`listings-${hostType}`)) {
+          map.getSource(`listings-${hostType}`).setData({
+            type: 'FeatureCollection',
+            features: features
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch listings:', error)
+      }
+    }
+
+    // 清除特定类型的图层数据
+    const clearListings = (hostType) => {
+      if (map.getSource(`listings-${hostType}`)) {
+        map.getSource(`listings-${hostType}`).setData({
+          type: 'FeatureCollection',
+          features: []
+        })
+      }
+    }
 
     watch(() => props.selectedLocation, (newLocation) => {
       if (newLocation && map) {
@@ -59,6 +166,39 @@ export default {
         })
       }
     })
+
+    // 监听房东类型和时间变化
+    watch(
+      [() => props.selectedHostTypes, () => props.currentTime],
+      async (newValue, oldValue) => {
+        if (!map) {
+          console.log('Map not ready yet')
+          return
+        }
+        
+        const [newTypes, newTime] = newValue
+        const [oldTypes] = oldValue || [[], null]
+        
+        // 找出新增和移除的类型
+        const oldSet = new Set(oldTypes || [])
+        const newSet = new Set(newTypes)
+        
+        // 处理新增的类型
+        for (const type of newSet) {
+          if (!oldSet.has(type)) {
+            await updateListings(type)
+          }
+        }
+        
+        // 处理移除的类型
+        for (const type of oldSet) {
+          if (!newSet.has(type)) {
+            clearListings(type)
+          }
+        }
+      },
+      { deep: true }  // 添加 deep 选项以确保能够检测到数组内部的变化
+    )
 
     onUnmounted(() => {
       if (map) {

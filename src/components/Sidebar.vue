@@ -12,27 +12,25 @@
         </div>
       </div>
 
-      <div v-show="!aboutToggle" class="text-detail my-1">Analyzing Host Behavior in NYC</div>
-
       <div v-show="!aboutToggle" class="controls-section mt-4">
         <div class="city-select mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">选择城市</label>
-          <select 
-            v-model="selectedCity" 
-            @change="onCityChange"
-            class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-          >
-            <option value="">请选择城市</option>
-            <option v-for="city in cities" :key="city" :value="city">
-              {{ city }}
-            </option>
-          </select>
+          <label class="block text-sm font-medium text-gray-500 mb-2">Select City</label>
+          <div class="relative">
+            <select 
+              v-model="selectedCity" 
+              @change="onCityChange"
+              class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">Select a city below</option>
+              <option v-for="city in cities" :key="city" :value="city">
+                {{ city }}
+              </option>
+            </select>
+          </div>
         </div>
 
         <div v-if="cityInfo" class="time-slider mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            时间范围
-          </label>
+          <label class="block text-sm font-medium text-gray-500 mb-2">Time Range</label>
           <div class="time-range flex justify-between text-xs text-gray-500 mb-1">
             <span>{{ formatDate(timeRange[0]) }}</span>
             <span class="current-time">{{ formatDate(currentTime) }}</span>
@@ -57,6 +55,24 @@
             />
           </div>
         </div>
+
+        <div v-if="cityInfo" class="host-types mb-4">
+          <label class="block text-sm font-medium text-gray-500 mb-2">Host Type</label>
+          <div class="space-y-2">
+            <label v-for="(label, category) in hostTypeLabels" 
+              :key="category" 
+              class="flex items-center cursor-pointer"
+            >
+              <input 
+                type="checkbox"
+                v-model="selectedHostTypes"
+                :value="category"
+                class="checkbox-input"
+              >
+              <span class="ml-2 text-sm text-gray-600">{{ label }}</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <About v-if="aboutToggle" />
@@ -76,7 +92,7 @@
 
 <script>
 import About from './About.vue'
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
 
@@ -100,6 +116,14 @@ export default {
     const cityInfo = ref(null)
     const timeRange = ref([0, 0])
     const currentTime = ref(0)
+    const selectedHostTypes = ref([])
+    const hostTypeLabels = {
+      highly_commercial: 'Highly Commercial',
+      commercial: 'Commercial',
+      semi_commercial: 'Semi-Commercial',
+      dual_host: 'Dual Host',
+      single_host: 'Single Host'
+    }
 
     const toggleSidebar = () => {
       isCollapsed.value = !isCollapsed.value
@@ -108,7 +132,7 @@ export default {
 
     const formatDate = (timestamp) => {
       const date = new Date(parseInt(timestamp))
-      return date.toLocaleDateString('zh-CN', {
+      return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long'
       })
@@ -121,13 +145,14 @@ export default {
         })
         cities.value = response.data.cities
       } catch (error) {
-        console.error('获取城市列表失败:', error)
+        console.error('Failed to fetch city list:', error)
       }
     }
 
     const onCityChange = async () => {
       if (!selectedCity.value) {
         cityInfo.value = null
+        selectedHostTypes.value = []
         return
       }
       
@@ -137,15 +162,18 @@ export default {
         })
         cityInfo.value = response.data
         
-        // 更新时间范围
+        selectedHostTypes.value = []
+        
+        // Update time range
         timeRange.value = [
           new Date(cityInfo.value.time_window.earliest).getTime(),
           new Date(cityInfo.value.time_window.latest).getTime()
         ]
-        currentTime.value = timeRange.value[1]
+        currentTime.value = Number(timeRange.value[1])
 
-        // 移动地图到选中城市，调整缩放级别
+        // Move the map to the selected city, adjust zoom level
         emit('city-selected', {
+          city: selectedCity.value,
           center: [
             cityInfo.value.center.longitude,
             cityInfo.value.center.latitude
@@ -153,21 +181,22 @@ export default {
           zoom: 11
         })
       } catch (error) {
-        console.error('获取城市数据失败:', error)
+        console.error('Failed to fetch city data:', error)
         cityInfo.value = null
       }
     }
 
     const onTimeChange = () => {
-      emit('time-changed', currentTime.value)
+      const timeValue = Number(currentTime.value)
+      emit('time-changed', timeValue)
     }
 
-    const getTimePosition = () => {
-      if (!timeRange.value[0] || !timeRange.value[1]) return 0
-      const total = timeRange.value[1] - timeRange.value[0]
-      const current = currentTime.value - timeRange.value[0]
-      return (current / total) * 100
-    }
+    // 监听房东类型选择变化
+    watch(selectedHostTypes, (newTypes) => {
+      if (selectedCity.value && cityInfo.value) {
+        emit('host-types-changed', newTypes)
+      }
+    })
 
     onMounted(() => {
       fetchCities()
@@ -185,7 +214,8 @@ export default {
       onCityChange,
       onTimeChange,
       formatDate,
-      getTimePosition
+      selectedHostTypes,
+      hostTypeLabels
     }
   }
 }
@@ -253,6 +283,20 @@ export default {
   line-height: 1;
   color: #666;
   user-select: none;
+}
+
+/* 自定义下拉框样式 */
+.custom-select {
+  position: relative;
+}
+
+.select-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
 }
 
 .range-slider {
@@ -339,5 +383,48 @@ export default {
   transform: translateX(-50%);
   color: #4f46e5;
   font-weight: 500;
+}
+
+/* 自定义复选框样式 */
+.checkbox-input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  margin-right: 8px;
+  cursor: pointer;
+  position: relative;
+  background-color: white;
+  transition: all 0.2s ease;
+}
+
+.checkbox-input:checked {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.checkbox-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #4f46e5;
+}
+
+.host-types {
+  padding: 8px 0;
+}
+
+.host-types label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.host-types label:last-child {
+  margin-bottom: 0;
 }
 </style> 

@@ -1,13 +1,11 @@
 <template>
-  <div
-    id="about-toggle"
-    class="about-button-container"
+  <button
+    class="about-button"
+    :class="{ active: aboutToggle }"
     @click="$emit('toggle')"
   >
-    <div class="about-button text-Roboto text-detail font-bold">
-      {{ aboutToggle === false ? 'About' : 'Analysis' }}
-    </div>
-  </div>
+    <span>{{ aboutToggle ? "×" : "i" }}</span>
+  </button>
 </template>
 
 <script>
@@ -24,20 +22,36 @@ export default {
 </script>
 
 <style>
-.about-button-container {
-  position: absolute;
-  right: 15px;
-  top: 15px;
-  padding: 0.5rem;
-  z-index: 10;
-  border-radius: 0.375rem;
-  transition: all 500ms ease-in-out;
+.about-button {
+  position: fixed;
+  left: calc(var(--sidebar-width) + 8px);
+  top: 1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #fff187;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  border: 1px solid;
-  background-color: rgb(254, 240, 138);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #000000;
+  z-index: 30;
+  transition: left 0.3s ease;
 }
 
-.about-button-container:hover {
-  background-color: rgb(253, 224, 71);
+.about-button:hover {
+  background-color: #ffd000;
+}
+
+.about-button.active {
+  background-color: #fff187;
+  color: #000000;
+}
+
+.sidebar-container.collapsed ~ .about-button {
+  left: 8px;
 }
 </style> 
