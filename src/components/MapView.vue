@@ -177,27 +177,35 @@ export default {
         }
         
         const [newTypes, newTime] = newValue
-        const [oldTypes] = oldValue || [[], null]
+        const [oldTypes, oldTime] = oldValue || [[], null]
         
-        // 找出新增和移除的类型
-        const oldSet = new Set(oldTypes || [])
-        const newSet = new Set(newTypes)
-        
-        // 处理新增的类型
-        for (const type of newSet) {
-          if (!oldSet.has(type)) {
+        // 如果时间发生变化，更新所有已选类型的房源
+        if (newTime !== oldTime) {
+          console.log('Time changed, updating all selected types')
+          for (const type of newTypes) {
             await updateListings(type)
           }
-        }
-        
-        // 处理移除的类型
-        for (const type of oldSet) {
-          if (!newSet.has(type)) {
-            clearListings(type)
+        } else {
+          // 如果只是类型发生变化，则只处理变化的类型
+          const oldSet = new Set(oldTypes || [])
+          const newSet = new Set(newTypes)
+          
+          // 处理新增的类型
+          for (const type of newSet) {
+            if (!oldSet.has(type)) {
+              await updateListings(type)
+            }
+          }
+          
+          // 处理移除的类型
+          for (const type of oldSet) {
+            if (!newSet.has(type)) {
+              clearListings(type)
+            }
           }
         }
       },
-      { deep: true }  // 添加 deep 选项以确保能够检测到数组内部的变化
+      { deep: true }
     )
 
     onUnmounted(() => {
