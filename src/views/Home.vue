@@ -5,6 +5,7 @@
       :selectedLocation="selectedLocation"
       :selectedHostTypes="selectedHostTypes"
       :currentTime="currentTime"
+      :isHexMode="isHexMode"
     />
     <Sidebar 
       :aboutToggle="aboutToggle" 
@@ -12,6 +13,7 @@
       @city-selected="handleCitySelect"
       @time-changed="handleTimeChange"
       @host-types-changed="handleHostTypesChange"
+      @view-mode-changed="handleViewModeChange"
       :class="{ 'collapsed': isSidebarCollapsed }"
     />
     <AboutButton 
@@ -45,6 +47,7 @@ export default {
     const selectedLocation = ref(null)
     const selectedHostTypes = ref([])
     const currentTime = ref(null)
+    const isHexMode = ref(false)
 
     const handleSidebarCollapse = (collapsed) => {
       isSidebarCollapsed.value = collapsed
@@ -64,6 +67,10 @@ export default {
       selectedHostTypes.value = types
     }
 
+    const handleViewModeChange = (mode) => {
+      isHexMode.value = mode
+    }
+
     return {
       aboutToggle,
       loading,
@@ -74,7 +81,9 @@ export default {
       handleTimeChange,
       selectedHostTypes,
       currentTime,
-      handleHostTypesChange
+      handleHostTypesChange,
+      isHexMode,
+      handleViewModeChange
     }
   }
 }

@@ -27,13 +27,23 @@
               </option>
             </select>
           </div>
+          <div class="mt-2">
+            <button
+              @click="toggleViewMode"
+              class="w-full p-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {{ isHexMode ? 'Switch to Points' : 'Switch to Hexagons' }}
+            </button>
+          </div>
         </div>
 
         <div v-if="cityInfo" class="time-slider mb-4">
-          <label class="block text-sm font-medium text-gray-500 mb-2">Time Range</label>
+          <label class="block text-sm font-medium text-gray-500 mb-2">Time Point</label>
           <div class="time-range flex justify-between text-xs text-gray-500 mb-1">
             <span>{{ formatDate(timeRange[0]) }}</span>
-            <span class="current-time">{{ formatDate(currentTime) }}</span>
+            <span class="current-time" :class="{ 'text-gray-400': currentTime !== internalTime }">
+              {{ formatDate(internalTime) }}
+            </span>
             <span>{{ formatDate(timeRange[1]) }}</span>
           </div>
           <div class="relative pt-1">
@@ -92,9 +102,10 @@
 
 <script>
 import About from './About.vue'
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch, onUnmounted } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
+import { debounce } from 'lodash'
 
 export default {
   name: 'Sidebar',
@@ -117,6 +128,7 @@ export default {
     const timeRange = ref([0, 0])
     const currentTime = ref(0)
     const selectedHostTypes = ref([])
+    const isHexMode = ref(false)
     const hostTypeLabels = {
       highly_commercial: 'Highly Commercial',
       commercial: 'Commercial',
@@ -124,6 +136,13 @@ export default {
       dual_host: 'Dual Host',
       single_host: 'Single Host'
     }
+
+    const internalTime = ref(0)
+
+    const debouncedTimeChange = debounce((value) => {
+      currentTime.value = value
+      emit('time-changed', value)
+    }, 500)
 
     const toggleSidebar = () => {
       isCollapsed.value = !isCollapsed.value
@@ -187,8 +206,8 @@ export default {
     }
 
     const onTimeChange = () => {
-      const timeValue = Number(currentTime.value)
-      emit('time-changed', timeValue)
+      internalTime.value = currentTime.value
+      debouncedTimeChange(currentTime.value)
     }
 
     // 监听房东类型选择变化
@@ -198,8 +217,17 @@ export default {
       }
     })
 
+    const toggleViewMode = () => {
+      isHexMode.value = !isHexMode.value
+      emit('view-mode-changed', isHexMode.value)
+    }
+
     onMounted(() => {
       fetchCities()
+    })
+
+    onUnmounted(() => {
+      debouncedTimeChange.cancel()
     })
 
     return {
@@ -211,11 +239,14 @@ export default {
       cityInfo,
       timeRange,
       currentTime,
+      internalTime,
       onCityChange,
       onTimeChange,
       formatDate,
       selectedHostTypes,
-      hostTypeLabels
+      hostTypeLabels,
+      isHexMode,
+      toggleViewMode
     }
   }
 }
@@ -383,6 +414,11 @@ export default {
   transform: translateX(-50%);
   color: #4f46e5;
   font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.current-time.text-gray-400 {
+  color: #9ca3af;
 }
 
 /* 自定义复选框样式 */

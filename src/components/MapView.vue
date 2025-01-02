@@ -29,12 +29,17 @@ export default {
     currentTime: {
       type: Number,
       default: null
+    },
+    isHexMode: {
+      type: Boolean,
+      default: false
     }
   },
   setup(props) {
     let map = null
     let currentCenter = null
     let mousePosition = null
+    let hexLayer = null
     const layerColors = {
       highly_commercial: '#FF0000',  // 红色
       commercial: '#FFA500',         // 橙色
@@ -67,9 +72,9 @@ export default {
             type: 'circle',
             source: `listings-${type}`,
             paint: {
-              'circle-radius': 6,
+              'circle-radius': 3,
               'circle-color': color,
-              'circle-opacity': 0.6
+              'circle-opacity': 0.35
             }
           })
         })
@@ -179,6 +184,12 @@ export default {
         const [newTypes, newTime] = newValue
         const [oldTypes, oldTime] = oldValue || [[], null]
         
+        // 如果是网格图模式，直接更新网格
+        if (props.isHexMode) {
+          updateHexGrid()
+          return
+        }
+        
         // 如果时间发生变化，更新所有已选类型的房源
         if (newTime !== oldTime) {
           console.log('Time changed, updating all selected types')
@@ -207,6 +218,110 @@ export default {
       },
       { deep: true }
     )
+
+    const updateHexGrid = async () => {
+      if (!props.selectedLocation?.city || !props.currentTime) {
+        return
+      }
+      
+      try {
+        const date = new Date(Number(props.currentTime))
+        const timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        
+        const response = await axios.get(
+          `http://localhost:8000/city/${props.selectedLocation.city}/hexgrid`,
+          {
+            params: {
+              time_point: timeStr,
+              categories: props.selectedHostTypes.join(',')
+            },
+            withCredentials: true
+          }
+        )
+        
+        if (!map.getSource('hexgrid')) {
+          map.addSource('hexgrid', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: []
+            }
+          })
+          
+          map.addLayer({
+            id: 'hexgrid-layer',
+            type: 'fill',
+            source: 'hexgrid',
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['get', 'points_count'],
+                0, 'rgba(0, 0, 255, 0)',
+                1, 'rgba(0, 0, 255, 0.1)',
+                10, 'rgba(0, 0, 255, 0.3)',
+                50, 'rgba(0, 0, 255, 0.5)',
+                100, 'rgba(0, 0, 255, 0.7)'
+              ],
+              'fill-opacity': 0.8
+            }
+          })
+        }
+        
+        const features = response.data.hexagons.map(hex => ({
+          type: 'Feature',
+          properties: {
+            id: hex.id,
+            points_count: hex.points_count
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              hex.boundary.map(coord => [coord[1], coord[0]])
+            ]
+          }
+        }))
+        
+        if (map.getLayer('hexgrid-layer')) {
+          map.setLayoutProperty('hexgrid-layer', 'visibility', 'visible')
+        }
+        
+        map.getSource('hexgrid').setData({
+          type: 'FeatureCollection',
+          features: features
+        })
+        
+      } catch (error) {
+        console.error('Failed to fetch hexgrid:', error)
+      }
+    }
+
+    // 监听视图模式变化
+    watch(() => props.isHexMode, (newMode) => {
+      if (!map) return
+      
+      if (newMode) {
+        // 隐藏散点图层
+        Object.keys(layerColors).forEach(type => {
+          if (map.getLayer(`listings-layer-${type}`)) {
+            map.setLayoutProperty(`listings-layer-${type}`, 'visibility', 'none')
+          }
+        })
+        // 立即更新网格
+        updateHexGrid()
+      } else {
+        // 显示散点图层
+        Object.keys(layerColors).forEach(type => {
+          if (map.getLayer(`listings-layer-${type}`)) {
+            map.setLayoutProperty(`listings-layer-${type}`, 'visibility', 'visible')
+          }
+        })
+        // 隐藏网格图层
+        if (map.getLayer('hexgrid-layer')) {
+          map.setLayoutProperty('hexgrid-layer', 'visibility', 'none')
+        }
+      }
+    })
 
     onUnmounted(() => {
       if (map) {
