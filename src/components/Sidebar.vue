@@ -85,7 +85,15 @@
         </div>
 
         <div v-if="cityInfo" class="yearly-stats mb-4">
-          <label class="block text-sm font-medium text-gray-500 mb-2">Yearly Statistics</label>
+          <div class="flex justify-between items-center mb-2">
+            <label class="text-sm font-medium text-gray-500">Yearly Statistics</label>
+            <button
+              @click="isListingMode = !isListingMode"
+              class="px-2 py-1 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {{ isListingMode ? 'Show Host Data' : 'Show Listing Data' }}
+            </button>
+          </div>
           <apexchart
             type="bar"
             height="350"
@@ -156,9 +164,9 @@ export default {
     })
 
     const internalTime = ref(0)
+    const isListingMode = ref(true)  // 默认显示房源数据
 
     const debouncedTimeChange = debounce((value) => {
-      currentTime.value = value
       emit('time-changed', value)
     }, 1000)
 
@@ -244,7 +252,7 @@ export default {
       updateHostRanking()
     }
 
-    const updateHostRanking = async () => {
+    const debouncedUpdateHostRanking = debounce(async () => {
       if (!selectedCity.value || !currentTime.value) return
       
       try {
@@ -275,6 +283,10 @@ export default {
       } catch (error) {
         console.error('Failed to fetch host ranking:', error)
       }
+    }, 500)
+
+    const updateHostRanking = () => {
+      debouncedUpdateHostRanking()
     }
 
     // 监听房东类型选择变化
@@ -342,6 +354,15 @@ export default {
       },
       legend: {
         position: 'bottom'
+      },
+      tooltip: {
+        shared: true,
+        intersect: false,
+        y: {
+          formatter: function(val) {
+            return val.toFixed(1) + '%'
+          }
+        }
       }
     })
 
@@ -432,27 +453,27 @@ export default {
           {
             name: 'Single Host',
             type: 'bar',
-            data: years.map(year => stats[year.toString()].listing_percentages.single_host)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_percentages' : 'percentages'].single_host)
           },
           {
             name: 'Dual Host',
             type: 'bar',
-            data: years.map(year => stats[year.toString()].listing_percentages.dual_host)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_percentages' : 'percentages'].dual_host)
           },
           {
             name: 'Semi Commercial',
             type: 'bar',
-            data: years.map(year => stats[year.toString()].listing_percentages.semi_commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_percentages' : 'percentages'].semi_commercial)
           },
           {
             name: 'Commercial',
             type: 'bar',
-            data: years.map(year => stats[year.toString()].listing_percentages.commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_percentages' : 'percentages'].commercial)
           },
           {
             name: 'Highly Commercial',
             type: 'bar',
-            data: years.map(year => stats[year.toString()].listing_percentages.highly_commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_percentages' : 'percentages'].highly_commercial)
           }
         ]
         
@@ -461,27 +482,27 @@ export default {
           {
             name: 'Single Host',
             type: 'line',
-            data: years.map(year => stats[year.toString()].listing_counts.single_host)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_counts' : 'counts'].single_host)
           },
           {
             name: 'Dual Host',
             type: 'line',
-            data: years.map(year => stats[year.toString()].listing_counts.dual_host)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_counts' : 'counts'].dual_host)
           },
           {
             name: 'Semi Commercial',
             type: 'line',
-            data: years.map(year => stats[year.toString()].listing_counts.semi_commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_counts' : 'counts'].semi_commercial)
           },
           {
             name: 'Commercial',
             type: 'line',
-            data: years.map(year => stats[year.toString()].listing_counts.commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_counts' : 'counts'].commercial)
           },
           {
             name: 'Highly Commercial',
             type: 'line',
-            data: years.map(year => stats[year.toString()].listing_counts.highly_commercial)
+            data: years.map(year => stats[year.toString()][isListingMode.value ? 'listing_counts' : 'counts'].highly_commercial)
           }
         ]
 
@@ -490,12 +511,20 @@ export default {
       }
     }
 
+    // 添加对 isListingMode 的监听
+    watch(isListingMode, () => {
+      if (selectedCity.value) {
+        updateYearlyStats(selectedCity.value)
+      }
+    })
+
     onMounted(() => {
       fetchCities()
     })
 
     onUnmounted(() => {
       debouncedTimeChange.cancel()
+      debouncedUpdateHostRanking.cancel()
     })
 
     return {
@@ -518,7 +547,8 @@ export default {
       chartOptions,
       chartSeries,
       lineChartOptions,
-      lineChartSeries
+      lineChartSeries,
+      isListingMode
     }
   }
 }
