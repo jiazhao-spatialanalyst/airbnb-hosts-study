@@ -83,6 +83,22 @@
             </label>
           </div>
         </div>
+
+        <div v-if="cityInfo" class="yearly-stats mb-4">
+          <label class="block text-sm font-medium text-gray-500 mb-2">Yearly Statistics</label>
+          <apexchart
+            type="bar"
+            height="350"
+            :options="chartOptions"
+            :series="chartSeries"
+          />
+          <apexchart
+            type="line"
+            height="250"
+            :options="lineChartOptions"
+            :series="lineChartSeries"
+          />
+        </div>
       </div>
 
       <About v-if="aboutToggle" />
@@ -106,11 +122,13 @@ import { computed, ref, onMounted, watch, onUnmounted } from 'vue'
 import { useStore } from 'vuex'
 import axios from 'axios'
 import { debounce } from 'lodash'
+import VueApexCharts from 'vue3-apexcharts'
 
 export default {
   name: 'Sidebar',
   components: {
-    About
+    About,
+    apexchart: VueApexCharts
   },
   props: {
     aboutToggle: {
@@ -129,20 +147,20 @@ export default {
     const currentTime = ref(0)
     const selectedHostTypes = ref([])
     const isHexMode = ref(false)
-    const hostTypeLabels = {
+    const hostTypeLabels = ref({
       highly_commercial: 'Highly Commercial',
       commercial: 'Commercial',
       semi_commercial: 'Semi-Commercial',
       dual_host: 'Dual Host',
       single_host: 'Single Host'
-    }
+    })
 
     const internalTime = ref(0)
 
     const debouncedTimeChange = debounce((value) => {
       currentTime.value = value
       emit('time-changed', value)
-    }, 500)
+    }, 1000)
 
     const toggleSidebar = () => {
       isCollapsed.value = !isCollapsed.value
@@ -188,7 +206,22 @@ export default {
           new Date(cityInfo.value.time_window.earliest).getTime(),
           new Date(cityInfo.value.time_window.latest).getTime()
         ]
-        currentTime.value = Number(timeRange.value[1])
+        
+        // 计算时间窗口的中间值
+        const timeWindowMiddle = Math.floor(
+          (timeRange.value[0] + timeRange.value[1]) / 2
+        )
+        currentTime.value = timeWindowMiddle
+        internalTime.value = timeWindowMiddle  // 同时更新内部时间值以保持UI同步
+        
+        // 获取初始的房东分类门槛值
+        updateHostRanking()
+        
+        // 手动触发时间变化事件
+        emit('time-changed', timeWindowMiddle)
+
+        // 获取年度统计数据
+        await updateYearlyStats(selectedCity.value)
 
         // Move the map to the selected city, adjust zoom level
         emit('city-selected', {
@@ -208,6 +241,40 @@ export default {
     const onTimeChange = () => {
       internalTime.value = currentTime.value
       debouncedTimeChange(currentTime.value)
+      updateHostRanking()
+    }
+
+    const updateHostRanking = async () => {
+      if (!selectedCity.value || !currentTime.value) return
+      
+      try {
+        const date = new Date(Number(currentTime.value))
+        const timeStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        
+        const response = await axios.get(
+          `http://localhost:8000/city/${selectedCity.value}/host_ranking`,
+          {
+            params: {
+              time_point: timeStr
+            },
+            withCredentials: true
+          }
+        )
+        
+        // 更新房东类型标签，显示每种类型的范围
+        if (response.data.host_categories) {
+          const categories = response.data.host_categories
+          hostTypeLabels.value = {
+            highly_commercial: `Highly Commercial (${categories.highly_commercial.range?.min || 0}-${categories.highly_commercial.range?.max || 0} listings)`,
+            commercial: `Commercial (${categories.commercial.range?.min || 0}-${categories.commercial.range?.max || 0} listings)`,
+            semi_commercial: `Semi-Commercial (${categories.semi_commercial.range?.min || 0}-${categories.semi_commercial.range?.max || 0} listings)`,
+            dual_host: 'Dual Host (2 listings)',
+            single_host: 'Single Host (1 listing)'
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch host ranking:', error)
+      }
     }
 
     // 监听房东类型选择变化
@@ -220,6 +287,207 @@ export default {
     const toggleViewMode = () => {
       isHexMode.value = !isHexMode.value
       emit('view-mode-changed', isHexMode.value)
+    }
+
+    const chartOptions = ref({
+      chart: {
+        stacked: true,
+        toolbar: { show: false },
+        type: 'bar'
+      },
+      plotOptions: {
+        bar: {
+          horizontal: false,
+          columnWidth: '70%'
+        }
+      },
+      xaxis: {
+        categories: [],
+        title: {
+          text: 'Year'
+        },
+        labels: {
+          rotate: -45,
+          style: {
+            fontSize: '12px'
+          }
+        },
+        tickPlacement: 'on'
+      },
+      yaxis: [
+        {
+          title: { text: 'Percentage (%)' },
+          max: 100,
+          labels: {
+            formatter: function(val) {
+              return val.toFixed(0) + '%'
+            }
+          }
+        }
+      ],
+      colors: ['#4169E1', '#32CD32', '#FFD700', '#FFA500', '#FF4500'],
+      dataLabels: {
+        enabled: true,
+        formatter: function(val) {
+          if (val > 5) {
+            return Math.round(val)
+          }
+          return ''
+        },
+        style: {
+          colors: ['#000000'],
+          fontSize: '11px',
+          fontWeight: 400
+        }
+      },
+      legend: {
+        position: 'bottom'
+      }
+    })
+
+    const chartSeries = ref([])
+    const lineChartSeries = ref([])
+
+    const lineChartOptions = ref({
+      chart: {
+        type: 'line',
+        toolbar: { show: false }
+      },
+      stroke: {
+        width: 2,
+        curve: 'smooth'
+      },
+      xaxis: {
+        categories: [],
+        type: 'numeric',
+        labels: {
+          formatter: (val) => Math.round(val),
+          style: {
+            fontSize: '12px'
+          }
+        },
+        title: {
+          text: 'Year'
+        }
+      },
+      yaxis: {
+        title: { text: 'Number of Listings' },
+        labels: {
+          formatter: (val) => Math.round(val)
+        }
+      },
+      colors: ['#4169E1', '#32CD32', '#FFD700', '#FFA500', '#FF4500'],
+      legend: {
+        position: 'bottom'
+      },
+      markers: {
+        size: 0
+      }
+    })
+
+    const updateYearlyStats = async (cityName) => {
+      try {
+        const response = await axios.get(
+          `http://localhost:8000/city/${cityName}/yearly_stats`,
+          { withCredentials: true }
+        )
+        
+        const stats = response.data.yearly_stats
+        const startYear = new Date(cityInfo.value.time_window.earliest).getFullYear() + 1
+        const endYear = new Date(cityInfo.value.time_window.latest).getFullYear()
+        const years = []
+        for (let year = startYear; year <= endYear; year++) {
+          years.push(year)
+        }
+        
+        // 更新柱状图配置
+        chartOptions.value = {
+          ...chartOptions.value,
+          xaxis: {
+            ...chartOptions.value.xaxis,
+            categories: years,
+            type: 'numeric',
+            tickAmount: years.length,
+            labels: {
+              formatter: (val) => Math.round(val),
+              rotate: -45,
+              style: {
+                fontSize: '12px'
+              }
+            }
+          }
+        }
+        
+        // 更新折线图配置
+        lineChartOptions.value = {
+          ...lineChartOptions.value,
+          xaxis: {
+            ...lineChartOptions.value.xaxis,
+            categories: years
+          }
+        }
+        
+        // 准备堆叠柱状图数据
+        chartSeries.value = [
+          {
+            name: 'Single Host',
+            type: 'bar',
+            data: years.map(year => stats[year.toString()].listing_percentages.single_host)
+          },
+          {
+            name: 'Dual Host',
+            type: 'bar',
+            data: years.map(year => stats[year.toString()].listing_percentages.dual_host)
+          },
+          {
+            name: 'Semi Commercial',
+            type: 'bar',
+            data: years.map(year => stats[year.toString()].listing_percentages.semi_commercial)
+          },
+          {
+            name: 'Commercial',
+            type: 'bar',
+            data: years.map(year => stats[year.toString()].listing_percentages.commercial)
+          },
+          {
+            name: 'Highly Commercial',
+            type: 'bar',
+            data: years.map(year => stats[year.toString()].listing_percentages.highly_commercial)
+          }
+        ]
+        
+        // 准备折线图数据
+        lineChartSeries.value = [
+          {
+            name: 'Single Host',
+            type: 'line',
+            data: years.map(year => stats[year.toString()].listing_counts.single_host)
+          },
+          {
+            name: 'Dual Host',
+            type: 'line',
+            data: years.map(year => stats[year.toString()].listing_counts.dual_host)
+          },
+          {
+            name: 'Semi Commercial',
+            type: 'line',
+            data: years.map(year => stats[year.toString()].listing_counts.semi_commercial)
+          },
+          {
+            name: 'Commercial',
+            type: 'line',
+            data: years.map(year => stats[year.toString()].listing_counts.commercial)
+          },
+          {
+            name: 'Highly Commercial',
+            type: 'line',
+            data: years.map(year => stats[year.toString()].listing_counts.highly_commercial)
+          }
+        ]
+
+      } catch (error) {
+        console.error('Failed to fetch yearly stats:', error)
+      }
     }
 
     onMounted(() => {
@@ -246,7 +514,11 @@ export default {
       selectedHostTypes,
       hostTypeLabels,
       isHexMode,
-      toggleViewMode
+      toggleViewMode,
+      chartOptions,
+      chartSeries,
+      lineChartOptions,
+      lineChartSeries
     }
   }
 }

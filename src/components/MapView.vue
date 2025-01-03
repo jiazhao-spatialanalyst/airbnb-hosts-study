@@ -10,6 +10,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { mapOptions } from '../assets/data'
 import { onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
+import { debounce } from 'lodash'
 
 export default {
   name: 'MapView',
@@ -172,6 +173,9 @@ export default {
       }
     })
 
+    // 添加一个变量来跟踪最后更新时间
+    let lastUpdateTime = 0
+
     // 监听房东类型和时间变化
     watch(
       [() => props.selectedHostTypes, () => props.currentTime],
@@ -184,7 +188,14 @@ export default {
         const [newTypes, newTime] = newValue
         const [oldTypes, oldTime] = oldValue || [[], null]
         
-        // 如果是网格图模式，直接更新网格
+        // 如果只是时间变化，并且变化间隔小于 1000ms，不更新
+        if (newTime !== oldTime && Date.now() - lastUpdateTime < 1000) {
+          return
+        }
+        
+        // 更新最后更新时间
+        lastUpdateTime = Date.now()
+        
         if (props.isHexMode) {
           updateHexGrid()
           return
@@ -219,8 +230,13 @@ export default {
       { deep: true }
     )
 
-    const updateHexGrid = async () => {
-      if (!props.selectedLocation?.city || !props.currentTime) {
+    // 创建防抖的网格更新函数
+    const debouncedUpdateHexGrid = debounce(async () => {
+      if (!props.selectedLocation?.city || !props.currentTime || props.selectedHostTypes.length === 0) {
+        // 如果没有选中任何房东类型，隐藏网格图层
+        if (map.getLayer('hexgrid-layer')) {
+          map.setLayoutProperty('hexgrid-layer', 'visibility', 'none')
+        }
         return
       }
       
@@ -294,6 +310,11 @@ export default {
       } catch (error) {
         console.error('Failed to fetch hexgrid:', error)
       }
+    }, 1000)  // 使用与滑动条相同的延迟时间
+
+    // 修改原有的 updateHexGrid 函数
+    const updateHexGrid = () => {
+      debouncedUpdateHexGrid()
     }
 
     // 监听视图模式变化
@@ -327,6 +348,7 @@ export default {
       if (map) {
         map.remove()
       }
+      debouncedUpdateHexGrid.cancel()
     })
 
     return {}
